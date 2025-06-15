@@ -1,10 +1,10 @@
-
 import json
 import os
 import logging
+import asyncio
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import (  # Исправленный импорт
+    Application, CommandHandler, MessageHandler, ContextTypes, filters
 )
 
 # Включаем логирование
@@ -79,7 +79,9 @@ async def main():
     TOKEN = os.getenv("BOT_TOKEN")
     if not TOKEN:
         raise ValueError("BOT_TOKEN не установлен в переменных окружения.")
-    app = ApplicationBuilder().token(TOKEN).build()
+    
+    # Исправленное создание приложения
+    app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add_word))
@@ -89,5 +91,4 @@ async def main():
     await app.run_polling()
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
