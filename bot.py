@@ -1,6 +1,8 @@
 import json
 import os
 import logging
+import re
+from random import shuffle
 from telegram import Update
 from telegram.ext import (
     Application, 
@@ -36,21 +38,40 @@ def save_words(words):
 # Глобальное хранилище
 WORDS = load_words()
 user_states = {}
+user_queues = {}  # Очередь слов для каждого пользователя
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет! Я покажу слово на русском, а ты введи перевод на английском.")
+    user_id = update.effective_user.id
+    user_queues[user_id] = []  # Сбрасываем очередь при старте
+    await update.message.reply_text(
+        "Привет! Я покажу слово на русском, а ты введи перевод на английский.\n\n"
+        "Можешь добавить несколько слов сразу:\n"
+        "/add кот - cat, собака - dog\n"
+        "или\n"
+        "/add\n"
+        "кот - cat\n"
+        "собака - dog"
+    )
     await ask_word(update, context)
 
-# Отправка случайного слова
+# Отправка случайного слова из очереди
 async def ask_word(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from random import choice
-    if not WORDS:
-        await update.message.reply_text("Словарь пуст. Добавь слова командой /add.")
-        return
-    
-    word = choice(WORDS)
     user_id = update.effective_user.id
+    
+    # Если очередь пуста, создаем новую из всех слов
+    if not user_queues.get(user_id):
+        if not WORDS:
+            await update.message.reply_text("Словарь пуст. Добавь слова командой /add.")
+            return
+        
+        # Создаем перемешанную копию всех слов
+        shuffled_words = WORDS.copy()
+        shuffle(shuffled_words)
+        user_queues[user_id] = shuffled_words
+    
+    # Берем следующее слово из очереди
+    word = user_queues[user_id].pop()
     user_states[user_id] = word
     
     await update.message.reply_text(f"Переведи: {word['russian']}")
@@ -72,27 +93,79 @@ async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await ask_word(update, context)
 
-# Команда /add
+# Команда /add с поддержкой нескольких слов
 async def add_word(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.replace("/add", "").strip()
-    if "-" not in text:
-        await update.message.reply_text("Используй формат: слово - перевод\nНапример: кошка - cat")
+    text = update.message.text.replace("/add", "", 1).strip()
+    
+    # Если текст пустой, попробуем получить текст из reply
+    if not text and update.message.reply_to_message:
+        text = update.message.reply_to_message.text.strip()
+    
+    if not text:
+        await update.message.reply_text(
+            "Введите слова в формате:\n"
+            "слово - перевод\n"
+            "Можно несколько через запятую или с новой строки\n\n"
+            "Пример:\n"
+            "кот - cat\n"
+            "собака - dog\n\n"
+            "Или одной строкой:\n"
+            "кот - cat, собака - dog"
+        )
         return
     
-    parts = text.split("-", 1)
-    if len(parts) < 2:
-        await update.message.reply_text("Ошибка формата. Используй: русское-слово - английский-перевод")
-        return
+    # Разбиваем текст на отдельные пары
+    pairs = []
+    if "\n" in text:
+        # Многострочный ввод
+        pairs = [line.strip() for line in text.split("\n") if line.strip()]
+    else:
+        # Однострочный ввод с разделителями
+        pairs = [pair.strip() for pair in re.split(r'[,;]', text) if pair.strip()]
+    
+    added_words = []
+    errors = []
+    
+    for i, pair in enumerate(pairs):
+        if "-" not in pair:
+            errors.append(f"Пара #{i+1}: '{pair}' - отсутствует дефис")
+            continue
+            
+        parts = pair.split("-", 1)
+        russian = parts[0].strip()
+        english = parts[1].strip()
         
-    russian, english = map(str.strip, parts)
-    new_word = {"russian": russian, "english": english}
+        if not russian:
+            errors.append(f"Пара #{i+1}: отсутствует русское слово")
+            continue
+        if not english:
+            errors.append(f"Пара #{i+1}: '{russian}' - отсутствует перевод")
+            continue
+            
+        # Проверяем дубликаты
+        if any(w['russian'] == russian for w in WORDS):
+            errors.append(f"Пара #{i+1}: '{russian}' - слово уже существует")
+            continue
+            
+        new_word = {"russian": russian, "english": english}
+        added_words.append(new_word)
     
-    # Обновляем глобальную переменную
-    global WORDS
-    WORDS.append(new_word)
-    save_words(WORDS)
+    # Добавляем слова в глобальный список
+    if added_words:
+        global WORDS
+        WORDS.extend(added_words)
+        save_words(WORDS)
     
-    await update.message.reply_text(f"✅ Слово добавлено: {russian} - {english}")
+    # Формируем ответ
+    response = ""
+    if added_words:
+        word_list = "\n".join([f"{w['russian']} - {w['english']}" for w in added_words])
+        response += f"✅ Добавлено слов: {len(added_words)}\n{word_list}\n\n"
+    
+    if errors:
+        response += f"❌ Ошибки ({len(errors)}):\n" + "\n".join(errors)
+    
+    await update.message.reply_text(response)
 
 # Функция запуска бота
 def main():
