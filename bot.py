@@ -26,7 +26,7 @@ def save_words(words):
     with open(WORDS_FILE, "w", encoding="utf-8") as f:
         json.dump(words, f, ensure_ascii=False, indent=2)
 
-# Глобальное хранилище слов и состояния
+# Глобальное хранилище слов и состояний
 WORDS = load_words()
 user_states = {}
 
@@ -35,7 +35,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привет! Я покажу слово на русском, а ты введи перевод на английском.")
     await ask_word(update)
 
-# Отправить слово
+# Отправить случайное слово
 async def ask_word(update: Update):
     from random import choice
     if not WORDS:
@@ -66,7 +66,8 @@ async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def add_word(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.replace("/add", "").strip()
     if "-" not in text:
-       await update.message.reply_text("Используй формат: слово - перевод\nНапример: кошка - cat")
+        await update.message.reply_text("Используй формат: слово - перевод\nНапример: кошка - cat")
+        return
     russian, english = map(str.strip, text.split("-", 1))
     new_word = {"russian": russian, "english": english}
     WORDS.append(new_word)
@@ -76,6 +77,8 @@ async def add_word(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Запуск бота
 async def main():
     TOKEN = os.getenv("BOT_TOKEN")
+    if not TOKEN:
+        raise ValueError("BOT_TOKEN не установлен в переменных окружения.")
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
