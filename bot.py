@@ -67,7 +67,6 @@ async def add_word(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.replace("/add", "").strip()
     if "-" not in text:
        await update.message.reply_text("Используй формат: слово - перевод\nНапример: кошка - cat")
-        return
     russian, english = map(str.strip, text.split("-", 1))
     new_word = {"russian": russian, "english": english}
     WORDS.append(new_word)
