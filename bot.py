@@ -95,6 +95,8 @@ async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Команда /add с поддержкой нескольких слов
 async def add_word(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global WORDS  # Перемещено в самое начало функции
+    
     text = update.message.text.replace("/add", "", 1).strip()
     
     # Если текст пустой, попробуем получить текст из reply
@@ -152,7 +154,6 @@ async def add_word(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Добавляем слова в глобальный список
     if added_words:
-        global WORDS
         WORDS.extend(added_words)
         save_words(WORDS)
     
